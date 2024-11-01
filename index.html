@@ -1,0 +1,184 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>yykdislab.cn汉字UTF-8编码和字模查询</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            text-align: center;
+        }
+        input {
+            font-size: 18px;
+            padding: 8px;
+            margin: 10px;
+        }
+        button {
+            font-size: 16px;
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .dot-matrix {
+            font-family: monospace;
+            white-space: pre;
+            margin: 10px 0;
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        canvas {
+            margin: 10px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>“yykdislab.cn”汉字UTF-8编码和字模查询</h1>
+        <div>
+            <input type="text" id="inputChar" placeholder="请输入汉字" maxlength="1" onkeypress="handleKeyPress(event)">
+            <button onclick="getUTF8Code()">查询</button>
+        </div>
+        <div id="result"></div>
+    </div>
+
+    <script src="font-data.js"></script>
+    <script>
+        // ------------------  汉字字模的数据结构定义 ------------------------ //
+        // 汉字字模数据结构
+        class FNT_GB16 {
+            constructor() {
+                this.Index = new Int8Array(2);  // 汉字内码索引
+                this.Msk = new Uint8Array(32);  // 点阵码数据
+            }
+        }
+
+        // 获取汉字的点阵数据
+        function getDotData(char) {
+            // 直接从 font-data.js 中获取点阵数据
+            return fontData[char] || null;
+        }
+
+        function getUTF8Code() {
+            const char = document.getElementById('inputChar').value;
+            if (!char) {
+                alert('请输入一个汉字！');
+                return;
+            }
+
+            const codePoint = char.charCodeAt(0);
+            const hex = codePoint.toString(16).toUpperCase();
+            const utf8 = encodeURIComponent(char)
+                .replace(/%/g, '')
+                .toUpperCase();
+
+            // 获取点阵数据
+            const dotData = getDotData(char);
+            
+            const result = document.getElementById('result');
+            result.innerHTML = `
+                <h3>查询结果：</h3>
+                <p>汉字：${char}</p>
+                <p>Unicode码点：U+${hex}</p>
+                <p>UTF-8编码：${utf8}</p>
+            `;
+
+            // 点阵显示部分
+            if (dotData) {
+                result.innerHTML += `<h4>16x16点阵数据：</h4>`;
+                
+                // 添加提示语
+                result.innerHTML += `<p style="color: #666; font-size: 14px; margin: 5px 0;">
+                    横向取模左高位, 数据排列: 从上到下从左到右
+                </p>`;
+                
+                // 添加十六进制数据显示（移到Canvas前面）
+                let hexDisplay = '<div class="dot-matrix">点阵数据（十六进制）：\n';
+                for (let i = 0; i < dotData.length; i++) {
+                    hexDisplay += '0x' + dotData[i].toString(16).padStart(2, '0').toUpperCase();
+                    if (i < dotData.length - 1) hexDisplay += ', ';
+                    if ((i + 1) % 8 === 0) hexDisplay += '\n';
+                }
+                hexDisplay += '</div>';
+                result.innerHTML += hexDisplay;
+                
+                // 添加Canvas显示
+                result.innerHTML += `<canvas id="dotCanvas" width="320" height="320"></canvas>`;
+
+                // 绘制点阵图案
+                setTimeout(() => {
+                    const canvas = document.getElementById('dotCanvas');
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    
+                    // 设置背景色
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    // 设置点的颜色
+                    ctx.fillStyle = '#000000';
+                    
+                    // 计算单个点的大小
+                    const dotSize = 18;
+                    const padding = 2;
+                    const startX = 20;
+                    const startY = 20;
+
+                    // 绘制16x16点阵
+                    for (let y = 0; y < 16; y++) {
+                        for (let x = 0; x < 16; x++) {
+                            // 计算字节索引：从上到下从左到右
+                            const byteIndex = y + Math.floor(x / 8) * 16;
+                            // 计算位索引：横向取模左高位
+                            const bitIndex = 7 - (x % 8);
+                            
+                            // 检查该位是否为1
+                            if ((dotData[byteIndex] >> bitIndex) & 1) {
+                                ctx.fillRect(
+                                    startX + x * (dotSize + padding),
+                                    startY + y * (dotSize + padding),
+                                    dotSize,
+                                    dotSize
+                                );
+                            }
+                            
+                            // 绘制网格
+                            ctx.strokeStyle = '#e0e0e0';
+                            ctx.strokeRect(
+                                startX + x * (dotSize + padding),
+                                startY + y * (dotSize + padding),
+                                dotSize,
+                                dotSize
+                            );
+                        }
+                    }
+                }, 0);
+            } else {
+                result.innerHTML += `<p>抱歉，暂无该汉字的点阵数据。</p>`;
+            }
+        }
+
+        // 添加回车键处理函数
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                getUTF8Code();
+            }
+        }
+    </script>
+</body>
+</html>
